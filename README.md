@@ -77,8 +77,16 @@ npm test                  # 14 unit + end-to-end MCP tests (LIVE=1 adds a mainne
 **Docker:**
 
 ```bash
-docker build -t xrpl-token-guard . && docker run -p 8787:8787 xrpl-token-guard
+# Web demo + Streamable HTTP (default target)
+docker build -t xrpl-token-guard .
+docker run --rm -p 8787:8787 xrpl-token-guard
+
+# stdio MCP clients / Glama: keep stdin open; do not allocate a TTY
+docker build --target stdio -t xrpl-token-guard:stdio .
+docker run --rm -i xrpl-token-guard:stdio
 ```
+
+For a Glama build spec that uses the default image, set CMD arguments to `node dist/stdio.js`. No API keys or wallet credentials are required.
 
 **Claude Desktop** (`claude_desktop_config.json`):
 
