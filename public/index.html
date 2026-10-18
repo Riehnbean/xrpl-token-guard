@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XRPL Token Guard · voice demo</title>
+<meta name="description" content="Ask out loud whether an XRP Ledger token is safe. A voice-assistant simulator that calls the XRPL Token Guard MCP server.">
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121821; --panel2: #18202b; --line: #243042; --ink: #e8eef5; --muted: #8fa1b5;
+    --accent: #38bdf8; --high: #f05252; --caution: #f5b83d; --good: #34d399; --info: #8fa1b5;
+    --ring: conic-gradient(from 0deg, #38bdf8, #6366f1, #22d3ee, #38bdf8);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(1200px 600px at 50% -10%, #13263a 0%, var(--bg) 60%); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px; max-width: 1180px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; }
+  .brand svg { width: 28px; height: 28px; }
+  .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); padding: 3px 8px; border-radius: 999px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 0 24px 40px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .stage { background: linear-gradient(180deg, var(--panel), #0f141c); border: 1px solid var(--line); border-radius: 20px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 20px; min-height: 620px; }
+  .device { position: relative; width: 168px; height: 168px; border-radius: 50%; display: grid; place-items: center; background: #0d131b; box-shadow: inset 0 -12px 30px #000a, 0 20px 50px #0008; }
+  .device::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; background: var(--ring); opacity: .25; filter: blur(2px); transition: opacity .3s; }
+  .device.listening::before, .device.speaking::before { opacity: 1; animation: spin 2.4s linear infinite; }
+  .device.thinking::before { opacity: .8; animation: spin .9s linear infinite; }
+  .device::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #0d131b; }
+  .device .core { position: relative; z-index: 1; width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 50% 35%, #1d2a3a, #0b1118); }
+  .bars { display: flex; gap: 5px; align-items: center; height: 40px; }
+  .bars i { width: 6px; height: 8px; border-radius: 3px; background: var(--accent); opacity: .5; }
+  .speaking .bars i { animation: bar .9s ease-in-out infinite; opacity: 1; }
+  .speaking .bars i:nth-child(2) { animation-delay: .1s } .speaking .bars i:nth-child(3) { animation-delay: .2s } .speaking .bars i:nth-child(4) { animation-delay: .3s } .speaking .bars i:nth-child(5) { animation-delay: .4s }
+  @keyframes bar { 0%,100% { height: 8px } 50% { height: 36px } }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .status { color: var(--muted); font-size: 14px; min-height: 21px; }
+  .convo { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .bubble { max-width: 92%; padding: 14px 16px; border-radius: 16px; font-size: 18px; animation: pop .25s ease-out; }
+  .user { align-self: flex-end; background: #1f3b57; border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: var(--panel2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  @keyframes pop { from { transform: translateY(6px); opacity: 0 } to { transform: none; opacity: 1 } }
+  .verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
+  .v-high_risk { background: #f052521f; color: var(--high); } .v-caution { background: #f5b83d1f; color: var(--caution); }
+  .v-no_red_flags { background: #34d3991f; color: var(--good); } .v-not_enough_data, .v-info { background: #8fa1b51f; color: var(--info); }
+  .reasons { margin: 10px 0 0; padding: 0; list-style: none; font-size: 14px; color: #c9d5e2; display: grid; gap: 6px; }
+  .reasons li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; }
+  .d-high { background: var(--high) } .d-caution { background: var(--caution) } .d-good { background: var(--good) } .d-info { background: var(--info) }
+  .more { font-size: 13px; color: var(--muted); margin-top: 8px; } .more a { color: var(--accent); }
+  .controls { width: 100%; display: grid; gap: 10px; margin-top: auto; }
+  .row { display: flex; gap: 10px; }
+  input { flex: 1; min-width: 0; background: #0d131b; border: 1px solid var(--line); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { background: var(--accent); color: #04121d; border: 0; border-radius: 12px; padding: 12px 16px; font-weight: 700; cursor: pointer; font-size: 15px; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+  button:disabled { opacity: .5; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { font-size: 13px; padding: 8px 12px; }
+  aside { display: grid; gap: 16px; align-content: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .card h2 { margin: 0 0 8px; font-size: 15px; letter-spacing: .3px; color: var(--muted); text-transform: uppercase; }
+  .card p { margin: 0; color: #c9d5e2; font-size: 14px; }
+  pre { margin: 0; background: #0a0e13; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b8c7d8; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+  .k { color: #7dd3fc } .s { color: #a7f3d0 }
+  .caption { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: min(900px, 92vw); background: #000c; color: #fff; font-size: 22px; padding: 10px 18px; border-radius: 10px; text-align: center; display: none; z-index: 10; }
+  @media (max-height: 760px) { .stage { min-height: 0; padding: 20px; gap: 14px; } .device { width: 120px; height: 120px; } .device .core { width: 70px; height: 70px; } .bubble { font-size: 17px; padding: 12px 14px; } .caption { font-size: 19px; bottom: 14px; } }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 24px 30px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.2 5.1 13.4 12 15 6.9-1.6 12-7.8 12-15V7z" fill="#38bdf8" opacity=".18"/><path d="M16 2 4 7v8c0 7.2 5.1 13.4 12 15 6.9-1.6 12-7.8 12-15V7z" fill="none" stroke="#38bdf8" stroke-width="2"/><path d="m11 16 3.5 3.5L21.5 12" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    XRPL Token Guard
+  </div>
+  <span class="tag">Voice-assistant simulator · calls the MCP server live</span>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="device" id="device"><div class="core"><div class="bars"><i></i><i></i><i></i><i></i><i></i></div></div></div>
+    <div class="status" id="status">Tap the mic and ask, e.g. “Is this RLUSD real?”</div>
+    <div class="convo" id="convo" aria-live="polite"></div>
+    <div class="controls">
+      <div class="row">
+        <input id="q" placeholder="Ask anything: “Is RLUSD safe?”, “Check my wallet”" aria-label="Question">
+        <button id="mic" class="ghost" title="Speak" aria-label="Speak">🎤</button>
+        <button id="ask">Ask</button>
+      </div>
+      <div class="row"><input id="addr" placeholder="Paste a token issuer or wallet address (starts with r) — optional" aria-label="XRPL address"></div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>What it does</h2>
+      <p>Ask out loud whether an XRP Ledger token is safe. The assistant calls the <b>XRPL Token Guard</b> MCP server, which reads live mainnet data (read-only) and answers with a verdict, the reasons behind it, and a sentence ready to speak.</p>
+    </div>
+    <div class="card">
+      <h2>Live MCP call</h2>
+      <pre id="log">Waiting for the first question…</pre>
+    </div>
+  </aside>
+</main>
+<footer>Not financial advice. Read-only ledger facts at the time of the check. Open source (MIT).</footer>
+<div class="caption" id="caption"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const MCP = new URL("mcp", location.href).toString();
+const ISSUERS = { RLUSD: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", USDC: "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE", SOLO: "rsoLo2S1kiGeCcn6hCUXVrCpGMWLrRrLZz" };
+const ALIASES = [[/\b(rlusd|r\.?l\.? ?usd|ripple (usd|dollar))\b/i, "RLUSD"], [/\b(usdc|usd coin|circle)\b/i, "USDC"], [/\b(solo|sologenic)\b/i, "SOLO"]];
+const CHIPS = [
+  { label: "Is this RLUSD real?", q: "Is this RLUSD real?", addr: "rp2DskzVGGz6iDw8ViSVjcMabqJJ2wA2S6" },
+  { label: "Is RLUSD safe?", q: "Is RLUSD safe?", addr: "" },
+  { label: "Check $FUZZY", q: "Is FUZZY safe to buy?", addr: "rhCAT4hRdi2Y9puNdkpMzxrdKa5wkppR62" },
+  { label: "Check my wallet", q: "Is my wallet safe?", addr: "rJyvqmdsqvpzayX9Y2mKr6LKkAME5TjcrY" },
+];
+
+// ---- tiny MCP client (Streamable HTTP, stateless JSON responses) ----
+let rid = 0, protocol = "2025-11-25", ready = null;
+async function rpc(method, params) {
+  const res = await fetch(MCP, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": protocol },
+    body: JSON.stringify({ jsonrpc: "2.0", id: ++rid, method, params }),
+  });
+  const body = await res.json();
+  if (body.error) throw new Error(body.error.message);
+  return body.result;
+}
+function init() {
+  ready ??= rpc("initialize", { protocolVersion: protocol, capabilities: {}, clientInfo: { name: "voice-demo", version: "0.1.0" } }).then((r) => { protocol = r.protocolVersion; return r; });
+  return ready;
+}
+async function callTool(name, args) {
+  await init();
+  showLog({ method: "tools/call", params: { name, arguments: args } }, null);
+  const t = performance.now();
+  const r = await rpc("tools/call", { name, arguments: args });
+  showLog({ method: "tools/call", params: { name, arguments: args } }, r.structuredContent, Math.round(performance.now() - t));
+  if (r.isError) throw new Error(r.content?.[0]?.text ?? "tool error");
+  return r.structuredContent;
+}
+function showLog(req, res, ms) {
+  const pick = res ? { verdict: res.verdict ?? res.is_official, spoken_summary: res.spoken_summary, reasons: res.reasons?.map((x) => `${x.severity}: ${x.code}`), ledger_index: res.ledger_index } : "…calling";
+  $("log").innerHTML = `<span class="k">→ POST /mcp</span>  ${esc(JSON.stringify(req, null, 2))}\n\n<span class="k">← result${ms ? ` (${ms} ms)` : ""}</span>  <span class="s">${esc(JSON.stringify(pick, null, 2))}</span>`;
+}
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
+// ---- intent: turn a sentence into a tool call ----
+function plan(text, addrInput) {
+  const addr = (text.match(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/) || [])[0] || addrInput.trim() || "";
+  const brand = (ALIASES.find(([re]) => re.test(text)) || [])[1];
+  const ticker = brand || ((text.match(/\$?([A-Z][A-Z0-9]{2,11})\b/) || [])[1]);
+  if (/wallet|account|hacked|drain|compromised/i.test(text) && addr) return { tool: "check_wallet_security", args: { address: addr } };
+  if (brand && !addr && /\breal|fake|official|legit\b/i.test(text)) return { tool: "is_it_the_real_token", args: { ticker: brand } };
+  if (ticker && (addr || brand)) return { tool: "check_token_safety", args: { currency: ticker, issuer: addr || ISSUERS[brand] } };
+  if (brand) return { tool: "is_it_the_real_token", args: { ticker: brand } };
+  return null;
+}
+
+// ---- UI ----
+function setState(s, msg) { $("device").className = "device " + s; $("status").textContent = msg || ""; }
+function bubble(cls, html) { const d = document.createElement("div"); d.className = "bubble " + cls; d.innerHTML = html; $("convo").appendChild(d); while ($("convo").children.length > 2) $("convo").firstChild.remove(); return d; }
+function caption(text) { const c = $("caption"); if (!text) { c.style.display = "none"; return; } c.textContent = text; c.style.display = "block"; }
+const LABEL = { high_risk: "High risk", caution: "Caution", no_red_flags: "No red flags found", not_enough_data: "Not enough data" };
+
+function speak(text) {
+  return new Promise((resolve) => {
+    setState("speaking", "Speaking…");
+    if (CAPTIONS) caption(text);
+    const done = () => { setState("", ""); setTimeout(() => caption(""), CAPTIONS ? 900 : 0); resolve(); };
+    if (window.__dur) console.log("EV a " + Date.now() + " " + text);
+    if (!("speechSynthesis" in window) || SILENT) return setTimeout(done, window.__dur?.[text] ?? Math.max(2500, text.length * 55));
+    const u = new SpeechSynthesisUtterance(text); u.rate = 1.02; u.onend = done; u.onerror = done; speechSynthesis.cancel(); speechSynthesis.speak(u);
+  });
+}
+
+async function ask(text) {
+  text = text.trim(); if (!text) return;
+  $("convo").innerHTML = ""; bubble("user", esc(text)); $("q").value = "";
+  const p = plan(text, $("addr").value);
+  if (!p) { const msg = "Tell me a token name like RLUSD, or paste an issuer or wallet address, and I'll check it."; bubble("bot", esc(msg)); return speak(msg); }
+  setState("thinking", `Checking the XRP Ledger · ${p.tool}`);
+  try {
+    const r = await callTool(p.tool, p.args);
+    let html;
+    if (p.tool === "is_it_the_real_token") {
+      const v = r.is_official === false ? "high_risk" : r.is_official ? "no_red_flags" : "info";
+      html = `<span class="verdict v-${v}">${r.is_official === false ? "Not the real one" : r.is_official ? "Official" : "Official issuer"}</span><div>${esc(r.spoken_summary)}</div><div class="more">${esc(r.message)}</div>`;
+    } else {
+      html = `<span class="verdict v-${r.verdict}">${LABEL[r.verdict]}${r.score != null && r.verdict !== "not_enough_data" ? ` · ${r.score}/100` : ""}</span><div>${esc(r.spoken_summary)}</div>` +
+        `<ul class="reasons">${(r.reasons || r.findings || []).slice(0, 3).map((f) => `<li><span class="dot d-${f.severity}"></span><span>${esc(f.message)}</span></li>`).join("")}</ul>` +
+        (r.more_info_url ? `<div class="more">Full ledger evidence: <a href="${esc(r.more_info_url)}" target="_blank" rel="noopener">${esc(r.more_info_url.replace(/^https?:\/\//, ""))}</a></div>` : "") +
+        `<div class="more">${esc(r.disclaimer)}</div>`;
+    }
+    bubble("bot", html);
+    await speak(r.spoken_summary);
+  } catch (e) {
+    const msg = "Sorry, I couldn't reach the XRP Ledger just now.";
+    bubble("bot", esc(msg) + `<div class="more">${esc(e.message)}</div>`); await speak(msg);
+  }
+}
+
+$("ask").onclick = () => ask($("q").value);
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask($("q").value); });
+for (const c of CHIPS) { const b = document.createElement("button"); b.className = "ghost"; b.textContent = c.label; b.onclick = () => { $("addr").value = c.addr; ask(c.q); }; $("chips").appendChild(b); }
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) $("mic").disabled = true;
+$("mic").onclick = () => {
+  const r = new SR(); r.lang = "en-US"; r.interimResults = false;
+  setState("listening", "Listening…");
+  r.onresult = (e) => ask(e.results[0][0].transcript);
+  r.onerror = r.onend = () => { if ($("device").classList.contains("listening")) setState("", ""); };
+  r.start();
+};
+
+// ---- scripted demo for screen recording: /?demo=1 ----
+const params = new URLSearchParams(location.search);
+const CAPTIONS = params.has("demo") || params.has("captions");
+const SILENT = params.has("silent");
+async function typeInto(el, text) { el.value = ""; for (const ch of text) { el.value += ch; await new Promise((r) => setTimeout(r, 38)); } }
+if (params.has("demo")) {
+  (async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    await init(); await wait(1200);
+    for (const c of CHIPS) {
+      await typeInto($("addr"), c.addr); await wait(300);
+      setState("listening", "Listening…");
+      if (window.__dur) console.log("EV q " + Date.now() + " " + c.q);
+      const t0 = Date.now(); await typeInto($("q"), c.q); await wait(Math.max(500, (window.__qdur?.[c.q] ?? 0) - (Date.now() - t0) + 250));
+      await ask(c.q); await wait(1800);
+    }
+    document.body.dataset.demoDone = "1";
+  })();
+}
+</script>
+</body>
+</html>

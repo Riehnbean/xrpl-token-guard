@@ -1,0 +1,42 @@
+{
+  "name": "xrpl-token-guard",
+  "version": "0.1.0",
+  "description": "Open-source MCP server that tells AI agents and voice assistants whether an XRP Ledger token is safe, and explains why.",
+  "main": "dist/http.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/http.js",
+    "stdio": "node dist/stdio.js",
+    "dev": "tsx src/http.ts",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "keywords": [
+    "mcp",
+    "xrpl",
+    "xrp",
+    "rlusd",
+    "token-safety",
+    "alexa",
+    "ai-agents"
+  ],
+  "author": "Zach Riehn",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "express": "^5.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "bin": {
+    "xrpl-token-guard": "dist/stdio.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
