@@ -12,7 +12,7 @@ const verdict = z.enum(["high_risk", "caution", "no_red_flags", "not_enough_data
 const tokenOutput = {
   verdict,
   verdict_label: z.string(),
-  score: z.number().describe("0-100, higher is safer. A rough guide only."),
+  score: z.number().describe("0-100 mechanical score; not a safety probability. Clawback is a high-risk control-policy failure."),
   token: z.object({ ticker: z.string(), currency_code: z.string(), issuer: z.string() }),
   spoken_summary: z.string().describe("One or two sentences ready for text-to-speech."),
   reasons: z.array(finding).describe("The top reasons behind the verdict, most important first."),

@@ -155,7 +155,8 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
   const info = infoR.v;
   ledgerIndex = info.ledger_index ?? null;
   const acct = info.account_data ?? {};
-  const flags = info.account_flags ?? {};
+  const f = Number(acct.Flags ?? 0);
+  const flags = info.account_flags ?? {disableMasterKey:!!(f&0x100000),noFreeze:!!(f&0x200000),globalFreeze:!!(f&0x400000),allowTrustLineClawback:!!(f&0x80000000),requireAuthorization:!!(f&0x40000),defaultRipple:!!(f&0x800000)};
   const domain = acct.Domain ? Buffer.from(acct.Domain, "hex").toString("utf8") : null;
   const regularKey: string | undefined = acct.RegularKey;
   const signerList = signerListOf(info);
@@ -183,9 +184,12 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
   }
 
   // 4. Who controls the issuer?
-  const keyBlackholed = !regularKey || BLACKHOLE_ADDRESSES.has(regularKey);
+  const keyBlackholed = regularKey === "rrrrrrrrrrrrrrrrrrrrBZbvji";
   const blackholed = !!flags.disableMasterKey && keyBlackholed && !signerList;
   facts.blackholed = blackholed;
+  facts.freeze_control_pass = !!flags.noFreeze || blackholed;
+  facts.issuer_controls_pass = (!!flags.noFreeze || blackholed) && !flags.allowTrustLineClawback && !flags.globalFreeze;
+  facts.issuer_control_rule = "NoFreeze OR (master disabled AND RegularKey rrrrrrrrrrrrrrrrrrrrBZbvji AND no signer list); clawback and active global freeze fail. NoFreeze alone does not remove minting or global-freeze powers.";
   if (blackholed) {
     const sev: Severity = imitated && imitated.issuer !== issuer ? "info" : "good";
     add({
@@ -203,10 +207,9 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
 
   // 5. Holder-level powers
   if (flags.allowTrustLineClawback) {
-    if (brand?.regulated) add({ code: "CLAWBACK_EXPECTED", severity: "info", message: `Clawback is enabled, as is normal for a regulated stablecoin like ${brand.ticker}.`, spoken: "Clawback is on, which is normal for a regulated stablecoin." });
-    else add({ code: "CLAWBACK", severity: "caution", message: `The issuer enabled Clawback, so it can pull ${ticker} back out of holders' wallets.`, spoken: "The issuer can take tokens back out of your wallet." });
+    add({ code: "CLAWBACK", severity: "high", message: `Clawback permission is enabled: this fails the issuer-control policy, including for regulated issuers. It does not imply impersonation.`, spoken: "Clawback is enabled and fails this control policy." });
   }
-  if (!flags.noFreeze && !blackholed && !brand?.regulated) {
+  if (!flags.noFreeze && !blackholed) {
     add({ code: "CAN_FREEZE", severity: "caution", message: `The issuer has not given up its freeze power (No Freeze is off), so it can freeze holders' ${ticker} trust lines.`, spoken: "The issuer can freeze holders' tokens." });
   }
   if (flags.requireAuthorization) add({ code: "REQUIRE_AUTH", severity: "info", message: "Holders must be approved by the issuer before they can hold this token.", spoken: "Holders need the issuer's approval." });

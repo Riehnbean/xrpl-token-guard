@@ -107,14 +107,18 @@ Open `http://127.0.0.1:8787/` and tap the mic (Chrome), or type.
 
 | Severity | Examples | Effect |
 |---|---|---|
-| ⛔ high | impersonation of an official token, Global Freeze on, issuer doesn't exist, nothing issued | verdict **High risk** |
-| ⚠️ caution | issuer can mint / freeze / claw back, >1% transfer fee, one wallet >50% or top 10 >80% (AMM pool excluded), fewer than 25 holders, under 500 XRP of AMM liquidity, issuer under 14 days old, domain doesn't list the issuer | verdict **Caution** |
+| ⛔ high | impersonation of an official token, Global Freeze on, clawback enabled, issuer doesn't exist, nothing issued | verdict **High risk** |
+| ⚠️ caution | issuer can mint / freeze, >1% transfer fee, one wallet >50% or top 10 >80% (AMM pool excluded), fewer than 25 holders, under 500 XRP of AMM liquidity, issuer under 14 days old, domain doesn't list the issuer | verdict **Caution** |
 | ✅ good / ℹ️ info | official issuer, black-holed supply, verified domain, deep liquidity | context only |
 
-Regulated stablecoins (RLUSD, USDC) are expected to keep freeze, clawback and multisig control, so those are reported as information, not warnings. The score (0–100) is a rough guide only. **Not financial advice.** These are ledger facts at the time of the check.
+Regulated stablecoins may retain issuer controls. Official identity remains separate from the control-policy verdict: clawback is a hard failure, even for an official issuer. The score (0–100) is a rough guide only. **Not financial advice.** These are ledger facts at the time of the check.
 
 ## Built by
 
 Zach Riehn ([Launch Lab](https://cocoeatsai.com/area4/tools/), XRPL tools for people and AI agents). Launch Lab also runs a pay-per-call x402 API (XRP/RLUSD on XRPL, USDC on Base) for deeper wallet and token reports. Token Guard is the free, open core.
 
 MIT licensed.
+
+### Issuer-control policy (2026-10-18)
+
+The freeze-control condition passes when **NoFreeze is set OR master is disabled, RegularKey is exactly `rrrrrrrrrrrrrrrrrrrrBZbvji`, and no signer list exists**. Clawback permission is a hard failure for every issuer, including regulated stablecoins; Global Freeze already active is also a failure. The MCP structured output reports `freeze_control_pass`, `issuer_controls_pass` and the exact rule. A missing regular key is not the requested blackhole proof. NoFreeze alone does not prevent minting or enabling Global Freeze. Identity, concentration and other checks still apply. Scores are mechanical, not probabilities of safety.

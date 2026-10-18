@@ -54,7 +54,7 @@ test("a blackholed fake RLUSD is still HIGH RISK (locked supply doesn't make a c
   assert.equal(r.findings.find((f) => f.code === "SUPPLY_LOCKED")?.severity, "info");
 });
 
-test("the official RLUSD issuer passes, and its multisig/clawback are treated as expected", async () => {
+test("official RLUSD identity remains true but clawback fails control policy", async () => {
   const rpc = mockRpc({
     account_info: () => ({
       ledger_index: 1,
@@ -68,13 +68,13 @@ test("the official RLUSD issuer passes, and its multisig/clawback are treated as
     account_tx: () => ({ transactions: [] }),
   });
   const r = await checkToken(rpc, { currency: "rlusd", issuer: REAL }, noLinks);
-  assert.equal(r.verdict, "no_red_flags");
+  assert.equal(r.verdict, "high_risk");
   assert.ok(r.findings.some((f) => f.code === "OFFICIAL_ISSUER"));
   assert.ok(r.findings.some((f) => f.code === "CONTROLLED_ISSUER"));
   assert.ok(!r.findings.some((f) => f.code === "SUPPLY_LOCKED"), "a multisig issuer is not black-holed");
 });
 
-test("an unknown issuer that can mint, freeze and claw back gets CAUTION with reasons", async () => {
+test("an unknown issuer that can mint, freeze and claw back gets HIGH RISK with reasons", async () => {
   const rpc = mockRpc({
     account_info: () => ({ ledger_index: 1, account_data: { TransferRate: 1050000000 }, account_flags: { allowTrustLineClawback: true } }),
     gateway_balances: () => ({ obligations: { MEW: "5000" } }),
@@ -83,7 +83,7 @@ test("an unknown issuer that can mint, freeze and claw back gets CAUTION with re
     account_tx: () => ({ transactions: [{ tx: { date: (now.getTime() / 1000 - 946684800) - 2 * 86400 } }] }),
   });
   const r = await checkToken(rpc, { currency: "MEW", issuer: MEME }, noLinks);
-  assert.equal(r.verdict, "caution");
+  assert.equal(r.verdict, "high_risk");
   const codes = r.findings.map((f) => f.code);
   for (const c of ["ISSUER_CAN_MINT", "CLAWBACK", "CAN_FREEZE", "TRANSFER_FEE", "NEW_ISSUER", "NO_AMM"]) assert.ok(codes.includes(c), c);
   assert.ok(r.score < 60);
@@ -159,4 +159,21 @@ test("wallet: master key only is clean", async () => {
   const rpc = mockRpc({ account_info: () => ({ account_data: { Balance: "25000000" }, account_flags: {} }), account_tx: () => ({ transactions: [] }) });
   const r = await checkWallet(rpc, MEME, { now });
   assert.equal(r.verdict, "no_red_flags");
+});
+
+for (const [label, flags, key, lists, pass] of [
+  ["exact blackhole", {disableMasterKey:true}, "rrrrrrrrrrrrrrrrrrrrBZbvji", [], true],
+  ["NoFreeze active issuer", {noFreeze:true}, undefined, [], true],
+  ["missing key", {disableMasterKey:true}, undefined, [], false],
+  ["other sink", {disableMasterKey:true}, "rrrrrrrrrrrrrrrrrrrrrhoLvTp", [], false],
+  ["master enabled", {}, "rrrrrrrrrrrrrrrrrrrrBZbvji", [], false],
+  ["multisig", {disableMasterKey:true}, "rrrrrrrrrrrrrrrrrrrrBZbvji", [{SignerQuorum:1}], false],
+  ["clawback overrides NoFreeze", {noFreeze:true,allowTrustLineClawback:true}, undefined, [], false],
+  ["clawback overrides blackhole", {disableMasterKey:true,allowTrustLineClawback:true}, "rrrrrrrrrrrrrrrrrrrrBZbvji", [], false],
+  ["global freeze", {noFreeze:true,globalFreeze:true}, undefined, [], false],
+] as const) test(`issuer control policy: ${label}`, async () => {
+  const rpc = mockRpc({account_info:()=>({account_data:{RegularKey:key},account_flags:flags,signer_lists:lists}),gateway_balances:()=>({obligations:{CAT:"1000"}}),amm_info:()=>({}),account_lines:()=>({lines:[]}),account_tx:()=>({transactions:[]})});
+  const r=await checkToken(rpc,{currency:"CAT",issuer:MEME},noLinks);
+  assert.equal(r.facts.issuer_controls_pass,pass);
+  if ('allowTrustLineClawback' in flags) assert.equal(r.verdict,'high_risk');
 });
