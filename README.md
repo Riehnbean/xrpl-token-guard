@@ -10,10 +10,26 @@ XRPL Token Guard is an open-source [MCP](https://modelcontextprotocol.io) server
 
 It never signs, never sends a transaction and never asks for keys.
 
+## Need more than a quick check?
+
+Try the free [hosted demo](https://cocoeatsai.com/area4/guard/) or browse the [free token evidence pages](https://cocoeatsai.com/area4/token/). Launch Lab offers a [Token Report for 5 XRP](https://cocoeatsai.com/area4/report/?kind=token), a [Wallet Checkup for 3 XRP](https://cocoeatsai.com/area4/report/?kind=wallet), and a [Token Launch Kit for 10 XRP](https://cocoeatsai.com/area4/report/?kind=kit). Preview the findings before choosing a paid report. These are factual ledger checks, not buy/sell advice or a guarantee of safety; Token Guard stays free.
+
+**Hosted MCP:** `https://cocoeatsai.com/area4/guard/mcp` (Streamable HTTP). The hosted demo supports typed questions and example buttons; microphone input is currently disabled by the hosting policy. It is a voice-assistant simulator, not an actual Alexa integration.
+
+For **Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`.cursor/mcp.json`), build a local clone using the commands below, then replace the absolute path in this configuration:
+
+```json
+{"mcpServers": {
+  "xrpl-token-guard": {"command": "node", "args": ["/absolute/path/to/xrpl-token-guard/dist/stdio.js"]}
+}}
+```
+
+Example risk interpretation (not a trading recommendation):
+
 ```
 You:    "Is this RLUSD real?"
 Guard:  "Warning, high risk. This token calls itself RLUSD, but it is not the real Ripple USD.
-         The real one comes from a different issuer. I would not buy it."
+         The real one comes from a different issuer. A matching name does not establish authenticity."
 ```
 
 ## Why it exists

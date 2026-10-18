@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.riehnbean/xrpl-token-guard",
+  "title": "XRPL Token Guard",
+  "description": "Read-only XRP Ledger token-risk, issuer-authenticity and wallet-security checks.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/Riehnbean/xrpl-token-guard",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://cocoeatsai.com/area4/guard/mcp"
+    }
+  ]
+}
