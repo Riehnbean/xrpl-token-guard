@@ -4,9 +4,20 @@
 // (<ticker>-<first 8 chars of issuer>-<hash>).
 
 const SITEMAP = process.env.TOKEN_GUARD_SITEMAP ?? "https://cocoeatsai.com/area4/token/sitemap.xml";
-const FALLBACK = process.env.TOKEN_GUARD_FALLBACK_URL ?? "https://cocoeatsai.com/area4/tools/";
+const FALLBACK = process.env.TOKEN_GUARD_FALLBACK_URL ?? "https://cocoeatsai.com/area4/token/";
 const ENABLED = (process.env.TOKEN_GUARD_LINKS ?? "on") !== "off";
 const TTL_MS = 24 * 3600 * 1000;
+
+/** A preview link only: creating this URL performs no checkout or payment. */
+export function fullReportUrl(kind: "token" | "wallet", fields: Record<string, string>): string | null {
+  if (!ENABLED) return null;
+  const url = new URL("https://cocoeatsai.com/area4/report/");
+  url.searchParams.set("kind", kind);
+  for (const key of kind === "token" ? ["currency", "issuer"] : ["address"]) {
+    if (fields[key]) url.searchParams.set(key, fields[key]);
+  }
+  return url.href;
+}
 
 let cache: { at: number; urls: string[] } | null = null;
 let inflight: Promise<string[]> | null = null;

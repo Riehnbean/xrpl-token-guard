@@ -4,7 +4,7 @@
 import { BLACKHOLE_ADDRESSES, RpcFn, XrplRpcError, isAddress, rippleTimeToDate } from "./xrpl.js";
 import { decodeCurrency, encodeCurrency, looksLike, skeleton } from "./currency.js";
 import { BRANDS, Brand, brandByIssuer } from "./brands.js";
-import { deepReportUrl } from "./links.js";
+import { deepReportUrl, fullReportUrl } from "./links.js";
 
 export type Severity = "high" | "caution" | "good" | "info";
 export type Verdict = "high_risk" | "caution" | "no_red_flags" | "not_enough_data";
@@ -28,6 +28,7 @@ export interface TokenReport {
   findings: Finding[];
   facts: Record<string, unknown>;
   more_info_url: string | null;
+  full_report_url: string | null;
   checked_at: string;
   ledger_index: number | null;
   disclaimer: string;
@@ -335,6 +336,7 @@ async function finish(a: { findings: Finding[]; facts: Record<string, unknown>; 
     findings: sorted,
     facts: a.facts,
     more_info_url: url,
+    full_report_url: fullReportUrl("token", { currency: a.code, issuer: a.issuer }),
     checked_at: a.now.toISOString(),
     ledger_index: a.ledgerIndex,
     disclaimer: DISCLAIMER,

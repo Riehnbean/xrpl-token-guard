@@ -38,6 +38,9 @@ test("MCP client can list tools and prompts over Streamable HTTP", async () => {
 
   const real = await client.callTool({ name: "is_it_the_real_token", arguments: { ticker: "RLUSD", issuer: "rp2DskzVGGz6iDw8ViSVjcMabqJJ2wA2S6" } });
   assert.equal((real.structuredContent as any).is_official, false);
+  const report = new URL((real.structuredContent as any).full_report_url);
+  assert.equal(report.searchParams.get("issuer"), "rp2DskzVGGz6iDw8ViSVjcMabqJJ2wA2S6");
+  assert.equal(report.searchParams.get("kind"), "token");
   await client.close();
 });
 

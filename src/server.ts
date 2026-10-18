@@ -3,6 +3,7 @@ import { z } from "zod";
 import { checkToken, checkWallet, isItReal, TokenReport, WalletReport } from "./checks.js";
 import { BRANDS } from "./brands.js";
 import { RpcFn, createRpc } from "./xrpl.js";
+import { fullReportUrl } from "./links.js";
 
 export const SERVER_INFO = { name: "xrpl-token-guard", version: "0.1.0" };
 
@@ -19,12 +20,14 @@ const tokenOutput = {
   findings: z.array(finding),
   facts: z.record(z.string(), z.unknown()),
   more_info_url: z.string().nullable(),
+  full_report_url: z.string().nullable(),
   checked_at: z.string(),
   ledger_index: z.number().nullable(),
   disclaimer: z.string(),
 };
 
 const walletOutput = {
+  full_report_url: z.string().nullable(),
   verdict,
   verdict_label: z.string(),
   address: z.string(),
@@ -36,6 +39,8 @@ const walletOutput = {
 };
 
 const realOutput = {
+  more_info_url: z.string().nullable(),
+  full_report_url: z.string().nullable(),
   ticker: z.string(),
   known_brand: z.boolean(),
   official: z.object({ name: z.string(), ticker: z.string(), issuer: z.string(), domain: z.string() }).nullable(),
@@ -54,13 +59,15 @@ export function tokenText(r: TokenReport): string {
     "",
     `Say it out loud: "${r.spoken_summary}"`,
   ];
-  if (r.more_info_url) lines.push("", `Full ledger evidence: ${r.more_info_url}`);
+  if (r.more_info_url) lines.push("", `Free ledger evidence: ${r.more_info_url}`);
+  if (r.full_report_url) lines.push("", `Full Token Report (5 XRP; preview before payment): ${r.full_report_url}`);
   lines.push("", `_${r.disclaimer}_`);
   return lines.join("\n");
 }
 
 export function walletText(r: WalletReport): string {
-  return [`**${r.verdict_label}** for wallet ${r.address}`, "", ...r.findings.map((f) => `- ${ICON[f.severity]} ${f.message}`), "", `Say it out loud: "${r.spoken_summary}"`, "", `_${r.disclaimer}_`].join("\n");
+  const url = fullReportUrl("wallet", { address: r.address });
+  return [`**${r.verdict_label}** for wallet ${r.address}`, "", ...r.findings.map((f) => `- ${ICON[f.severity]} ${f.message}`), "", `Say it out loud: "${r.spoken_summary}"`, ...(url ? ["", `Full Wallet Checkup (3 XRP; preview before payment): ${url}`] : []), "", `_${r.disclaimer}_`].join("\n");
 }
 
 const errorResult = (e: unknown) => ({ isError: true, content: [{ type: "text" as const, text: `Couldn't run the check: ${(e as Error).message ?? String(e)}` }] });
@@ -114,8 +121,11 @@ export function createServer(rpc: RpcFn = createRpc()): McpServer {
       annotations: { title: "Verify an official XRPL token", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ ticker, issuer }) => {
-      const r = isItReal(ticker, issuer);
-      return { content: [{ type: "text", text: `${r.message}\n\nSay it out loud: "${r.spoken_summary}"` }], structuredContent: r as unknown as Record<string, unknown> };
+      const result = isItReal(ticker, issuer);
+      const url = fullReportUrl("token", { currency: ticker, issuer: issuer ?? result.official?.issuer ?? "" });
+      const r = { ...result, more_info_url: url ? "https://cocoeatsai.com/area4/token/" : null, full_report_url: url };
+      const links = url ? `\n\nFree token evidence index: ${r.more_info_url}\nFull Token Report (5 XRP; preview before payment): ${url}` : "";
+      return { content: [{ type: "text", text: `${r.message}\n\nSay it out loud: "${r.spoken_summary}"${links}` }], structuredContent: r as unknown as Record<string, unknown> };
     },
   );
 
@@ -132,7 +142,7 @@ export function createServer(rpc: RpcFn = createRpc()): McpServer {
     },
     async ({ address }) => {
       try {
-        const r = await checkWallet(rpc, address);
+        const r = { ...await checkWallet(rpc, address), full_report_url: fullReportUrl("wallet", { address }) };
         return { content: [{ type: "text", text: walletText(r) }], structuredContent: r as unknown as Record<string, unknown> };
       } catch (e) {
         return errorResult(e);
