@@ -51,10 +51,11 @@ test("a blackholed fake RLUSD is still HIGH RISK (locked supply doesn't make a c
   assert.equal(r.verdict, "high_risk");
   assert.equal(r.reasons[0].code, "IMPERSONATION");
   assert.match(r.spoken_summary, /not the real Ripple USD/);
+  assert.doesNotMatch(r.spoken_summary, /\b(buy|sell)\b/i);
   assert.equal(r.findings.find((f) => f.code === "SUPPLY_LOCKED")?.severity, "info");
 });
 
-test("official RLUSD identity remains true but clawback fails control policy", async () => {
+test("official RLUSD reports clawback, freeze and multisig as information", async () => {
   const rpc = mockRpc({
     account_info: () => ({
       ledger_index: 1,
@@ -68,7 +69,15 @@ test("official RLUSD identity remains true but clawback fails control policy", a
     account_tx: () => ({ transactions: [] }),
   });
   const r = await checkToken(rpc, { currency: "rlusd", issuer: REAL }, noLinks);
-  assert.equal(r.verdict, "high_risk");
+  assert.equal(r.verdict, "no_red_flags");
+  assert.equal(r.score, 100);
+  assert.equal(r.facts.issuer_controls_pass, true);
+  for (const code of ["CLAWBACK", "CAN_FREEZE", "CONTROLLED_ISSUER"]) {
+    assert.equal(r.findings.find((f) => f.code === code)?.severity, "info");
+  }
+  assert.ok(r.reasons.some((f) => f.code === "CLAWBACK" && f.severity === "info"));
+  assert.match(r.spoken_summary, /official issuer/);
+  assert.doesNotMatch(r.spoken_summary + r.disclaimer, /\b(buy|sell)\b/i);
   assert.ok(r.findings.some((f) => f.code === "OFFICIAL_ISSUER"));
   assert.ok(r.findings.some((f) => f.code === "CONTROLLED_ISSUER"));
   assert.ok(!r.findings.some((f) => f.code === "SUPPLY_LOCKED"), "a multisig issuer is not black-holed");
@@ -84,9 +93,47 @@ test("an unknown issuer that can mint, freeze and claw back gets HIGH RISK with 
   });
   const r = await checkToken(rpc, { currency: "MEW", issuer: MEME }, noLinks);
   assert.equal(r.verdict, "high_risk");
+  assert.equal(r.findings.find((f) => f.code === "CLAWBACK")?.severity, "high");
+  assert.equal(r.facts.issuer_controls_pass, false);
+  assert.doesNotMatch(r.spoken_summary, /\b(buy|sell)\b/i);
   const codes = r.findings.map((f) => f.code);
   for (const c of ["ISSUER_CAN_MINT", "CLAWBACK", "CAN_FREEZE", "TRANSFER_FEE", "NEW_ISSUER", "NO_AMM"]) assert.ok(codes.includes(c), c);
   assert.ok(r.score < 60);
+});
+
+test("curated issuer exceptions require the exact currency; active global freeze still fails", async () => {
+  for (const [currency, issuer, frozen, expected] of [
+    ["USDC", "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE", false, "no_red_flags"],
+    ["SOLO", "rsoLo2S1kiGeCcn6hCUXVrCpGMWLrRrLZz", false, "no_red_flags"],
+    ["RLUSD2", REAL, false, "high_risk"],
+    ["RLUSD", REAL, true, "high_risk"],
+  ] as const) {
+    const code = encodeCurrency(currency);
+    const rpc = mockRpc({
+      account_info: () => ({ account_data: {}, account_flags: { allowTrustLineClawback: true, globalFreeze: frozen } }),
+      gateway_balances: () => ({ obligations: { [code]: "1000" } }),
+      amm_info: () => ({}), account_lines: () => ({ lines: [] }), account_tx: () => ({ transactions: [] }),
+    });
+    const r = await checkToken(rpc, { currency, issuer }, noLinks);
+    assert.equal(r.verdict, expected, currency);
+    assert.doesNotMatch(r.spoken_summary, /\b(buy|sell)\b/i);
+    if (currency === "RLUSD2") assert.ok(!r.findings.some((f) => f.code === "OFFICIAL_ISSUER"));
+    if (frozen) assert.equal(r.facts.issuer_controls_pass, false);
+  }
+});
+
+test("blackholed FUZZY remains no_red_flags with neutral speech", async () => {
+  const code = encodeCurrency("FUZZY");
+  const rpc = mockRpc({
+    account_info: () => blackholed(), gateway_balances: () => ({ obligations: { [code]: "1000" } }),
+    amm_info: () => ({ amm: { account: "rAMM", amount: "5000000000" } }),
+    account_lines: () => ({ lines: Array.from({ length: 50 }, (_, i) => ({ account: `r${i}`, currency: code, balance: "-20" })) }),
+    account_tx: () => ({ transactions: [] }),
+  });
+  const r = await checkToken(rpc, { currency: "FUZZY", issuer: MEME }, noLinks);
+  assert.equal(r.verdict, "no_red_flags");
+  assert.equal(r.facts.blackholed, true);
+  assert.doesNotMatch(r.spoken_summary, /\b(buy|sell)\b/i);
 });
 
 test("case-insensitive ticker resolution finds '$BIGDS' from 'bigds'", async () => {

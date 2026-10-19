@@ -39,7 +39,7 @@ const LABELS: Record<Verdict, string> = {
   no_red_flags: "No red flags found",
   not_enough_data: "Not enough data",
 };
-export const DISCLAIMER = "Not a promise and not financial advice. Read-only ledger facts at the time of the check. Check before you buy.";
+export const DISCLAIMER = "Not a promise and not financial advice. Read-only ledger facts at the time of the check.";
 const ORDER: Record<Severity, number> = { high: 0, caution: 1, good: 2, info: 3 };
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -110,7 +110,9 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
 
   // 1. Impersonation: a famous name with the wrong issuer.
   const imitated = findBrandImitated(ticker);
-  const officialBrand = brandByIssuer(issuer);
+  const listedBrand = brandByIssuer(issuer);
+  // Identity requires the exact issued currency, not a look-alike ticker.
+  const officialBrand = listedBrand && code === encodeCurrency(listedBrand.ticker) ? listedBrand : undefined;
   const wrapped = imitated && imitated.issuer !== issuer && /^[^.]+\.[A-Za-z0-9]{1,8}$/.test(ticker) && skeleton(ticker.split(".")[0]) === skeleton(imitated.ticker);
   if (imitated && imitated.issuer !== issuer && wrapped) {
     add({
@@ -173,7 +175,7 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
   const supply = supplyStr ? Number(supplyStr) : 0;
   facts.total_supply = supplyStr ?? (gwR.ok ? "0" : null);
   if (gwR.ok && !supplyStr) {
-    add({ code: "NO_SUPPLY", severity: "high", message: `Issuer ${issuer} has no ${ticker} in circulation, so there is nothing real to buy under this name.`, spoken: `This issuer hasn't issued any ${ticker}.` });
+    add({ code: "NO_SUPPLY", severity: "high", message: `Issuer ${issuer} has no ${ticker} in circulation.`, spoken: `This issuer hasn't issued any ${ticker}.` });
   } else if (supply > 0) {
     add({ code: "SUPPLY", severity: "info", message: `${fmt(supply)} ${ticker} are in circulation.`, spoken: `About ${fmt(supply)} tokens exist.` });
   }
@@ -187,9 +189,9 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
   const keyBlackholed = regularKey === "rrrrrrrrrrrrrrrrrrrrBZbvji";
   const blackholed = !!flags.disableMasterKey && keyBlackholed && !signerList;
   facts.blackholed = blackholed;
-  facts.freeze_control_pass = !!flags.noFreeze || blackholed;
-  facts.issuer_controls_pass = (!!flags.noFreeze || blackholed) && !flags.allowTrustLineClawback && !flags.globalFreeze;
-  facts.issuer_control_rule = "NoFreeze OR (master disabled AND RegularKey rrrrrrrrrrrrrrrrrrrrBZbvji AND no signer list); clawback and active global freeze fail. NoFreeze alone does not remove minting or global-freeze powers.";
+  facts.freeze_control_pass = !!brand || !!flags.noFreeze || blackholed;
+  facts.issuer_controls_pass = (!!brand || !!flags.noFreeze || blackholed) && (!!brand || !flags.allowTrustLineClawback) && !flags.globalFreeze;
+  facts.issuer_control_rule = "Exact curated official token/issuer controls are informational. Otherwise: NoFreeze OR (master disabled AND RegularKey rrrrrrrrrrrrrrrrrrrrBZbvji AND no signer list), with clawback a hard fail. Active global freeze always fails. NoFreeze alone does not remove minting or global-freeze powers.";
   if (blackholed) {
     const sev: Severity = imitated && imitated.issuer !== issuer ? "info" : "good";
     add({
@@ -198,8 +200,8 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
       message: `The issuer's master key is disabled${regularKey ? ` and its regular key is the black-hole address ${regularKey}` : " with no regular key"}, so nobody can mint more ${ticker} or change its settings.${sev === "info" ? " Locked supply does not make an imitation genuine." : ""}`,
       spoken: sev === "info" ? "Its supply is locked, but that doesn't make a copy real." : "The issuer is black-holed, so no one can mint more.",
     });
-  } else if (brand?.regulated) {
-    add({ code: "CONTROLLED_ISSUER", severity: "info", message: `${brand.name} keeps an active, controlled issuer${signerList ? ` (multisig: ${facts.signer_list && (facts.signer_list as any).signers} signers)` : ""}, which is expected for a regulated stablecoin.`, spoken: "As a regulated stablecoin, its issuer stays in control, which is normal." });
+  } else if (brand) {
+    add({ code: "CONTROLLED_ISSUER", severity: "info", message: `${brand.name} keeps an active, controlled issuer${signerList ? ` (multisig: ${facts.signer_list && (facts.signer_list as any).signers} signers)` : ""}. ${brand.regulated ? "This is expected for a regulated stablecoin." : "These controls remain with its curated official issuer."}`, spoken: brand.regulated ? "As a regulated stablecoin, its issuer stays in control, which is normal." : "Its official issuer retains control." });
   } else {
     const how = signerList ? `a multisig of ${signerList.SignerEntries?.length ?? "?"} signers` : flags.disableMasterKey ? `the regular key ${regularKey}` : "its master key";
     add({ code: "ISSUER_CAN_MINT", severity: "caution", message: `The issuer is still controlled by ${how}, so it can mint more ${ticker} or change token settings at any time.`, spoken: "The issuer can still mint more tokens whenever it wants." });
@@ -207,10 +209,10 @@ export async function checkToken(rpc: RpcFn, input: { currency: string; issuer: 
 
   // 5. Holder-level powers
   if (flags.allowTrustLineClawback) {
-    add({ code: "CLAWBACK", severity: "high", message: `Clawback permission is enabled: this fails the issuer-control policy, including for regulated issuers. It does not imply impersonation.`, spoken: "Clawback is enabled and fails this control policy." });
+    add({ code: "CLAWBACK", severity: brand ? "info" : "high", message: brand ? `Issuer can claw back holders' tokens — ${brand.regulated ? "normal for a regulated stablecoin" : "a disclosed control of this curated official issuer"}.` : "Clawback permission is enabled and fails the non-official issuer-control policy. It does not imply impersonation.", spoken: brand ? "Its official issuer can claw back holders' tokens." : "Clawback is enabled and fails this control policy." });
   }
   if (!flags.noFreeze && !blackholed) {
-    add({ code: "CAN_FREEZE", severity: "caution", message: `The issuer has not given up its freeze power (No Freeze is off), so it can freeze holders' ${ticker} trust lines.`, spoken: "The issuer can freeze holders' tokens." });
+    add({ code: "CAN_FREEZE", severity: brand ? "info" : "caution", message: `The issuer has not given up its freeze power (No Freeze is off), so it can freeze holders' ${ticker} trust lines.${brand ? " This official-issuer capability is reported as information." : ""}`, spoken: "The issuer can freeze holders' tokens." });
   }
   if (flags.requireAuthorization) add({ code: "REQUIRE_AUTH", severity: "info", message: "Holders must be approved by the issuer before they can hold this token.", spoken: "Holders need the issuer's approval." });
 
@@ -312,12 +314,13 @@ async function finish(a: { findings: Finding[]; facts: Record<string, unknown>; 
   const verdict: Verdict = highs.length ? "high_risk" : a.missingCore ? "not_enough_data" : cautions.length ? "caution" : "no_red_flags";
   const score = verdict === "not_enough_data" ? 0 : Math.max(0, Math.min(highs.length ? 35 : 100, 100 - 60 * highs.length - 12 * cautions.length));
   // Reasons explain the verdict: for a bad verdict show only the problems (never a green tick next to a fake).
-  const reasons = (verdict === "no_red_flags" ? [...goods, ...sorted.filter((f) => f.severity === "info")] : verdict === "not_enough_data" ? sorted : [...highs, ...cautions]).slice(0, 3);
+  const controlInfo = sorted.filter((f) => f.severity === "info" && ["CLAWBACK", "CAN_FREEZE", "CONTROLLED_ISSUER"].includes(f.code)).sort((x, y) => Number(y.code === "CLAWBACK") - Number(x.code === "CLAWBACK"));
+  const reasons = (verdict === "no_red_flags" ? [...goods.slice(0, 1), ...controlInfo, ...goods.slice(1), ...sorted.filter((f) => f.severity === "info" && !controlInfo.includes(f))] : verdict === "not_enough_data" ? sorted : [...highs, ...cautions]).slice(0, 3);
 
   let spoken: string;
-  if (verdict === "high_risk") spoken = `Warning, high risk. ${highs[0].spoken}${highs[1] ? " " + highs[1].spoken : ""} I would not buy it.`;
+  if (verdict === "high_risk") spoken = `Warning, high risk. ${highs[0].spoken}${highs[1] ? " " + highs[1].spoken : ""} Be careful with this token.`;
   else if (verdict === "caution") spoken = `Caution. ${cautions.slice(0, 2).map((c) => c.spoken).join(" ")}`;
-  else if (verdict === "no_red_flags") spoken = `No red flags found. ${(goods[0] ?? sorted[0])?.spoken ?? ""} That's not a promise, so still check before you buy.`;
+  else if (verdict === "no_red_flags") spoken = `No red flags found. ${(goods[0] ?? sorted[0])?.spoken ?? ""} This is not a guarantee of safety.`;
   else spoken = "I couldn't read enough from the XRP Ledger to judge this token. Please try again in a minute.";
 
   const lookup = a.opts.linkLookup ?? deepReportUrl;
